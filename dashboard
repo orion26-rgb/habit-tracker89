@@ -1,0 +1,260 @@
+
+import React, { useState, useEffect } from 'react';
+import { 
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area
+} from 'recharts';
+import { Trophy, TrendingUp, Clock, History, BrainCircuit, Zap, Target, Flame } from 'lucide-react';
+import { AppState } from '../types';
+import { getXpForLevel, getNextLevelXp } from '../constants';
+import { generateProductivityTips } from '../services/gemini';
+
+interface DashboardProps {
+  state: AppState;
+  recordStudySession: (min: number) => void;
+  completeQuest: (id: string) => void;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ state, recordStudySession, completeQuest }) => {
+  const { user, habits, activities, quests } = state;
+  const [tips, setTips] = useState<string>("Analyzing your productivity genome...");
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+
+  const currentLevelXp = getXpForLevel(user.currentLevel);
+  const nextLevelXp = getNextLevelXp(user.currentLevel);
+  const progressPercent = Math.min(100, Math.max(0, ((user.totalXp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100));
+
+  useEffect(() => {
+    let interval: any;
+    if (isTimerRunning) {
+      interval = setInterval(() => setTimerSeconds(s => s + 1), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isTimerRunning]);
+
+  useEffect(() => {
+    const fetchTips = async () => {
+      const result = await generateProductivityTips(habits, user.totalXp);
+      setTips(result);
+    };
+    fetchTips();
+  }, []);
+
+  const stopTimer = () => {
+    const minutes = Math.floor(timerSeconds / 60);
+    if (minutes > 0) recordStudySession(minutes);
+    setIsTimerRunning(false);
+    setTimerSeconds(0);
+  };
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const chartData = activities.slice(0, 10).reverse().map(a => ({
+    name: new Date(a.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    xp: a.xpGained
+  }));
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">Level {user.currentLevel} <span className="text-indigo-600">Ascendant</span></h2>
+          <div className="flex items-center gap-3 mt-1">
+             <div className="flex items-center gap-1.5 bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">
+               <Flame size={12} fill="currentColor" /> {user.streakCount} Day Streak
+             </div>
+             <p className="text-gray-400 text-xs font-medium italic">Welcome back to the grid, {user.username}.</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <div className="bg-white border border-gray-100 px-6 py-4 rounded-3xl shadow-xl shadow-gray-100/50 flex items-center gap-4">
+            <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600">
+              <Trophy size={22} />
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total XP</p>
+              <p className="text-2xl font-mono font-bold text-gray-900">{user.totalXp.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Progress Bar with Gradient */}
+      <div className="bg-white border border-gray-100 p-8 rounded-[40px] shadow-xl shadow-gray-100/30">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-2">
+            <Target size={16} className="text-indigo-500" />
+            <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Evolution Progress</span>
+          </div>
+          <span className="text-xs font-mono font-bold bg-indigo-600 text-white px-3 py-1 rounded-full">{progressPercent.toFixed(1)}%</span>
+        </div>
+        <div className="h-4 w-full bg-gray-50 rounded-full overflow-hidden border border-gray-100 p-1">
+          <div 
+            className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(99,102,241,0.3)]"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Deep Work Timer - Vibrant */}
+        <div className="bg-indigo-600 p-1 rounded-[40px] shadow-2xl shadow-indigo-200">
+          <div className="bg-white border border-transparent p-8 rounded-[38px] flex flex-col items-center text-center space-y-6">
+            <div className="flex items-center gap-2 text-indigo-500 bg-indigo-50 px-3 py-1 rounded-full">
+              <Zap size={14} fill="currentColor" />
+              <h3 className="text-[10px] font-black uppercase tracking-widest">Sync Mind</h3>
+            </div>
+            <div className="text-7xl font-mono font-bold text-gray-900 tracking-tighter drop-shadow-sm">
+              {formatTime(timerSeconds)}
+            </div>
+            <div className="w-full pt-4 space-y-3">
+              {!isTimerRunning ? (
+                <button 
+                  onClick={() => setIsTimerRunning(true)}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black py-5 rounded-[24px] transition-all transform hover:-translate-y-1 shadow-lg shadow-indigo-100"
+                >
+                  Initiate Session
+                </button>
+              ) : (
+                <button 
+                  onClick={stopTimer}
+                  className="w-full bg-red-500 hover:bg-red-600 text-white text-sm font-black py-5 rounded-[24px] transition-all transform hover:-translate-y-1 shadow-lg shadow-red-100"
+                >
+                  Terminate & Log
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Quest Log - New Feature */}
+        <div className="bg-white border border-gray-100 p-8 rounded-[40px] shadow-xl shadow-gray-100/30">
+           <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
+            <Target size={18} className="text-rose-500" />
+            Active Quests
+          </h3>
+          <div className="space-y-4">
+            {quests.map(quest => (
+              <div 
+                key={quest.id} 
+                className={`p-4 rounded-3xl border transition-all ${
+                  quest.isCompleted 
+                  ? 'bg-gray-50 border-gray-100 opacity-60' 
+                  : 'bg-white border-rose-100 hover:border-rose-300 shadow-sm'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl ${quest.isCompleted ? 'bg-gray-200' : 'bg-rose-50 text-rose-500'}`}>
+                      <Zap size={14} fill={quest.isCompleted ? 'none' : 'currentColor'} />
+                    </div>
+                    <p className={`text-sm font-bold ${quest.isCompleted ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{quest.title}</p>
+                  </div>
+                  {quest.isCompleted && <div className="text-[9px] font-bold text-emerald-500 uppercase">Cleared</div>}
+                </div>
+                {!quest.isCompleted && (
+                  <div className="flex items-center justify-between mt-3">
+                    <p className="text-[10px] text-gray-500 font-medium">{quest.description}</p>
+                    <span className="text-[10px] font-mono font-bold bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full">+{quest.xpReward} XP</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* AI Strategy - Amber Accent */}
+        <div className="bg-amber-400 p-1 rounded-[40px] shadow-2xl shadow-amber-100">
+          <div className="bg-white h-full p-8 rounded-[38px] flex flex-col">
+            <h3 className="text-xs font-black uppercase tracking-widest text-amber-500 mb-6 flex items-center gap-2">
+              <BrainCircuit size={18} />
+              Neural Strategy
+            </h3>
+            <div className="flex-1 p-5 rounded-3xl bg-amber-50 border border-amber-100">
+              <p className="text-gray-700 text-sm leading-relaxed font-semibold italic">
+                "{tips}"
+              </p>
+            </div>
+            <div className="mt-6 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[10px] text-amber-600 font-black uppercase tracking-widest">
+                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                Live Insight Node
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Productivity Chart with Gradient Fill */}
+        <div className="bg-white border border-gray-100 p-8 rounded-[40px] shadow-xl shadow-gray-100/30">
+          <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-8 flex items-center gap-2">
+            <TrendingUp size={18} className="text-indigo-500" />
+            Neural Activity Flow
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorXp" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
+                <XAxis dataKey="name" hide />
+                <YAxis hide />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#fff', border: 'none', borderRadius: '16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                  itemStyle={{ color: '#4f46e5', fontWeight: 'bold' }}
+                />
+                <Area type="monotone" dataKey="xp" stroke="#6366f1" fillOpacity={1} fill="url(#colorXp)" strokeWidth={3} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Feed - More colorful */}
+        <div className="bg-white border border-gray-100 p-8 rounded-[40px] shadow-xl shadow-gray-100/30">
+          <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
+            <History size={18} className="text-emerald-500" />
+            Kernel Logs
+          </h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
+            {activities.length === 0 ? (
+              <div className="text-center py-10 space-y-2">
+                <p className="text-gray-300 text-xs font-bold uppercase">System Standby</p>
+                <p className="text-gray-200 text-[10px]">Awaiting initial interaction...</p>
+              </div>
+            ) : (
+              activities.map((a) => (
+                <div key={a.id} className="flex items-center justify-between p-4 rounded-3xl bg-gray-50 border border-gray-100 hover:border-indigo-100 transition-colors group">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2.5 rounded-xl shadow-sm ${
+                      a.type === 'STUDY' ? 'bg-indigo-50 text-indigo-500' : 
+                      a.type === 'HABIT' ? 'bg-purple-50 text-purple-500' : 
+                      a.type === 'FINANCE' ? 'bg-emerald-50 text-emerald-500' : 
+                      'bg-rose-50 text-rose-500'
+                    }`}>
+                      {a.type === 'STUDY' ? <Clock size={16} /> : a.type === 'HABIT' ? <Trophy size={16} /> : a.type === 'FINANCE' ? <Zap size={16} /> : <Target size={16} />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">{a.description}</p>
+                      <p className="text-[10px] text-gray-400 font-mono font-bold uppercase">{new Date(a.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">+{a.xpGained} XP</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
